@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@keyframes spectrumBounce {
+  0%, 100% {
+    transform: scaleY(0.18);
+  }
+  25% {
+    transform: scaleY(0.92);
+  }
+  50% {
+    transform: scaleY(0.35);
+  }
+  75% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes peakBounce {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  40% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+  75% {
+    transform: translateY(-3px);
+    opacity: 0.85;
+  }
+}
+
+.animate-spectrum {
+  animation: spectrumBounce ease-in-out infinite alternate;
+  transform-origin: bottom;
+}
+
+.animate-peak {
+  animation: peakBounce cubic-bezier(0.2, 0.8, 0.2, 1) infinite alternate;
+}

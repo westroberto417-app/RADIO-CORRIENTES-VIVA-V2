@@ -1,0 +1,7 @@
+{
+  "name": "Radio Corrientes Viva",
+  "description": "Reproductor oficial de radio en vivo de Radio Corrientes Viva con visualización de portadas dinámicas, letras de canciones, historial y soporte PWA instalable.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
