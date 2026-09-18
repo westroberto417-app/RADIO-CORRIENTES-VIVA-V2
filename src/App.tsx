@@ -442,7 +442,7 @@ export default function App() {
               <img
                 src="/radio-logo.png"
                 alt="Logo Radio Corrientes Viva"
-                className="w-9 h-9 rounded-full object-cover shadow-[0_0_12px_rgba(236,72,153,0.6)] border border-pink-500/40"
+                className="w-10 h-10 object-contain drop-shadow-[0_0_12px_rgba(236,72,153,0.7)] transition-transform hover:scale-105"
                 referrerPolicy="no-referrer"
               />
               <h1 className="text-base sm:text-lg font-black tracking-wider text-white uppercase drop-shadow-sm">
@@ -500,7 +500,11 @@ export default function App() {
                     alt={`${nowPlaying.title} - ${nowPlaying.artist}`}
                     loading="eager"
                     decoding="async"
-                    className={`w-full h-full object-cover transition-transform duration-700 ${
+                    className={`w-full h-full ${
+                      !nowPlaying.art || nowPlaying.art === DEFAULT_COVER || nowPlaying.art === '/radio-logo.png'
+                        ? 'object-contain p-2'
+                        : 'object-cover'
+                    } transition-transform duration-700 ${
                       isPlaying ? 'scale-105' : 'scale-100'
                     }`}
                     onError={(e) => {

@@ -55,11 +55,11 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between pb-5 border-b border-white/10">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-cyan-400 via-purple-500 to-pink-500 p-[2px] shadow-[0_0_15px_rgba(236,72,153,0.5)]">
+              <div className="w-11 h-11 flex items-center justify-center p-0.5 drop-shadow-[0_0_12px_rgba(236,72,153,0.7)]">
                 <img
                   src="/radio-logo.png"
                   alt="Radio Corrientes Viva"
-                  className="w-full h-full rounded-full object-cover"
+                  className="w-full h-full object-contain"
                   referrerPolicy="no-referrer"
                 />
               </div>
