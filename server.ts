@@ -3,6 +3,7 @@ import http from 'http';
 import https from 'https';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { REGIONAL_NEWS } from './src/data/newsData';
 
 const app = express();
 const PORT = 3000;
@@ -487,6 +488,30 @@ app.get('/api/lyrics', async (req: Request, res: Response) => {
 
   lyricsCache.set(cacheKey, lyrics);
   res.json({ lyrics });
+});
+
+// Regional News Endpoint (San Miguel, Loreto, Caá Catí, Santa Rosa, Región Iberá)
+app.get('/api/news', (req, res) => {
+  const locality = req.query.locality as string | undefined;
+  const query = (req.query.q as string | undefined)?.toLowerCase();
+
+  let filtered = [...REGIONAL_NEWS];
+
+  if (locality && locality !== 'Todas') {
+    filtered = filtered.filter((n: any) => n.locality.toLowerCase() === locality.toLowerCase());
+  }
+
+  if (query) {
+    filtered = filtered.filter(
+      (n: any) =>
+        n.title.toLowerCase().includes(query) ||
+        n.summary.toLowerCase().includes(query) ||
+        n.locality.toLowerCase().includes(query) ||
+        n.category.toLowerCase().includes(query)
+    );
+  }
+
+  res.json({ news: filtered });
 });
 
 async function startServer() {

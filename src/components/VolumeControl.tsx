@@ -47,14 +47,15 @@ export const VolumeControl: React.FC<VolumeControlProps> = ({ volume, onChange }
         onClick={() => setIsOpen((prev) => !prev)}
         onDoubleClick={toggleMute}
         aria-label={`Volumen ${percentage}%`}
-        title={`Volumen ${percentage}% (Doble clic para silenciar)`}
-        className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer ${
+        title="VOLUMEN"
+        className={`px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl flex items-center gap-1.5 transition-all duration-200 cursor-pointer shadow-sm ${
           isOpen
             ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-500/50'
             : 'bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/10'
         }`}
       >
         <span>{getVolumeIcon()}</span>
+        <span className="text-xs font-semibold uppercase tracking-wider">VOLUMEN</span>
       </button>
 
       {/* Popover Slider in Crystal Glass */}

@@ -35,6 +35,16 @@
   transform-origin: bottom;
 }
 
+.animate-spectrum-up {
+  animation: spectrumBounce ease-in-out infinite alternate;
+  transform-origin: bottom;
+}
+
+.animate-spectrum-down {
+  animation: spectrumBounce ease-in-out infinite alternate;
+  transform-origin: top;
+}
+
 .animate-peak {
   animation: peakBounce cubic-bezier(0.2, 0.8, 0.2, 1) infinite alternate;
 }

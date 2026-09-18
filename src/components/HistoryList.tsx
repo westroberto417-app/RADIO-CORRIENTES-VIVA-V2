@@ -26,7 +26,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   };
 
   return (
-    <section className="w-full mt-6 bg-white/[0.04] backdrop-blur-2xl rounded-3xl p-5 sm:p-6 border border-white/10 shadow-2xl shadow-black/40 ring-1 ring-white/5">
+    <section className="w-full bg-white/[0.04] backdrop-blur-2xl rounded-3xl p-5 sm:p-6 border border-white/10 shadow-2xl shadow-black/40 ring-1 ring-white/5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
           <Clock className="w-3.5 h-3.5 text-indigo-400" />

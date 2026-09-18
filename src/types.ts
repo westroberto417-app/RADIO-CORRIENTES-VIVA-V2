@@ -35,3 +35,16 @@ export interface RadioData {
   nextSong: NextSong | null;
   history: HistoryItem[];
 }
+
+export interface RegionalNewsItem {
+  id: string;
+  title: string;
+  summary: string;
+  locality: 'San Miguel' | 'Loreto' | 'Caá Catí' | 'Santa Rosa' | 'Región Iberá';
+  category: string;
+  sourceName: string;
+  sourceUrl?: string;
+  publishedAt: string;
+  relativeTime: string;
+  imageUrl?: string;
+}
