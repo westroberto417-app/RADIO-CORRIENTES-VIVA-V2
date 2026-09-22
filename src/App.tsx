@@ -30,9 +30,11 @@ import { HistoryModal } from './components/HistoryModal';
 import { SongRequestModal } from './components/SongRequestModal';
 import { ListenerChatModal } from './components/ListenerChatModal';
 import { MenuDrawer } from './components/MenuDrawer';
-import { PWAInstallButton } from './components/PWAInstallButton';
+import { InstallPromptBanner } from './components/InstallPromptBanner';
 import { SleepTimerModal } from './components/SleepTimerModal';
 import { NewsModal } from './components/NewsModal';
+import { SupportModal } from './components/SupportModal';
+import { AnimatedCoffeeIcon } from './components/AnimatedCoffeeIcon';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { RadioData, NowPlayingSong, StationInfo, HistoryItem } from './types';
 
@@ -87,6 +89,7 @@ export default function App() {
   const [isRequestOpen, setIsRequestOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isNewsOpen, setIsNewsOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
@@ -131,11 +134,16 @@ export default function App() {
   };
 
   // Active Bottom Tab
-  const [activeTab, setActiveTab] = useState<'inicio' | 'chat' | 'pedir' | 'noticias' | 'mas'>('inicio');
+  const [activeTab, setActiveTab] = useState<'inicio' | 'noticias' | 'apoyar' | 'mas'>('inicio');
 
-  // Audio ref
+  // Audio & Stream Health refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamAttemptRef = useRef<number>(0);
+  const isPlayingRef = useRef<boolean>(false);
+  const isManualPauseRef = useRef<boolean>(false);
+  const lastPlaybackProgressRef = useRef<number>(Date.now());
+  const lastPositionRef = useRef<number>(-1);
+  const reconnectTimeoutRef = useRef<any>(null);
 
   const handleCast = async () => {
     if (audioRef.current && 'remote' in audioRef.current) {
@@ -243,6 +251,193 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Keep isPlayingRef and MediaSession playbackState in sync
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
+
+  // Handle PWA shortcut actions on initial launch (e.g. "Escuchar en vivo", "Noticias")
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    const view = params.get('view');
+
+    if (action === 'play' || params.get('play') === '1') {
+      const timer = setTimeout(() => {
+        handlePlay();
+      }, 400);
+      return () => clearTimeout(timer);
+    } else if (view === 'news') {
+      setIsNewsOpen(true);
+    } else if (view === 'history') {
+      setIsHistoryOpen(true);
+    } else if (view === 'support' || view === 'cafecito') {
+      setIsSupportOpen(true);
+    }
+
+    if (action || view || params.get('play')) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // Helper to obtain fresh stream URL with cache-busting timestamp
+  // Stream 0: Direct Cloudflare HTTPS (continuous, never terminates with 5-min timeout)
+  // Stream 1: Express proxy fallback
+  const getStreamUrl = (streamIndex: number) => {
+    const base = streamIndex === 0 ? STREAM_PRIMARY : STREAM_PROXY;
+    return `${base}?_t=${Date.now()}`;
+  };
+
+  // Screen WakeLock to prevent mobile CPU/screen sleep during radio playback
+  const wakeLockRef = useRef<any>(null);
+
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator && !wakeLockRef.current) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', () => {
+          wakeLockRef.current = null;
+        });
+      }
+    } catch {
+      // Ignore if not supported or permission denied
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    try {
+      if (wakeLockRef.current) {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  // Audio Context unlocker: activates real-time background audio thread on Android/MIUI
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const unlockAudioContext = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!audioContextRef.current && AudioCtx) {
+        audioContextRef.current = new AudioCtx();
+      }
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  // Reconnect audio stream seamlessly if network drops or buffer starves
+  const reconnectStream = (switchSource = false) => {
+    if (isManualPauseRef.current) return;
+    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+
+    if (switchSource) {
+      streamAttemptRef.current = streamAttemptRef.current === 0 ? 1 : 0;
+    }
+
+    setIsBuffering(true);
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    try {
+      const targetUrl = getStreamUrl(streamAttemptRef.current);
+      audio.src = targetUrl;
+      audio
+        .play()
+        .then(() => {
+          setIsBuffering(false);
+          setIsPlaying(true);
+          setPlaybackError(null);
+          lastPlaybackProgressRef.current = Date.now();
+          lastPositionRef.current = audio.currentTime;
+          requestWakeLock();
+        })
+        .catch((err) => {
+          if (err?.name === 'AbortError') return;
+          console.warn('Playback reconnect failed, retrying in 2.5s...', err);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isPlayingRef.current && !isManualPauseRef.current) {
+              reconnectStream(true);
+            }
+          }, 2500);
+        });
+    } catch {
+      // Ignore sync throw
+    }
+  };
+
+  // Stream Health Watchdog: monitors live stream with safety margins (avoids false drops on background tabs)
+  useEffect(() => {
+    const watchdogInterval = setInterval(() => {
+      if (!isPlayingRef.current || isManualPauseRef.current) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      const currentPos = audio.currentTime;
+
+      if (!audio.paused && !audio.ended) {
+        if (currentPos > 0 && currentPos === lastPositionRef.current) {
+          // Stream buffer starved for > 16 seconds of verified silence
+          if (Date.now() - lastPlaybackProgressRef.current > 16000) {
+            console.warn('Live audio stall detected. Auto-reconnecting cleanly...');
+            lastPlaybackProgressRef.current = Date.now();
+            reconnectStream(false);
+          }
+        } else {
+          lastPositionRef.current = currentPos;
+          lastPlaybackProgressRef.current = Date.now();
+        }
+      } else if (audio.paused && !isManualPauseRef.current) {
+        // Audio paused unexpectedly by OS interruption or temporary headphone disconnect
+        if (Date.now() - lastPlaybackProgressRef.current > 8000) {
+          console.warn('Live audio paused unexpectedly. Resuming playback...');
+          lastPlaybackProgressRef.current = Date.now();
+          audio.play().catch(() => {
+            reconnectStream(false);
+          });
+        }
+      }
+    }, 4000);
+
+    return () => clearInterval(watchdogInterval);
+  }, []);
+
+  // Visibility and Online change listeners: ensures instant recovery when user returns or network reconnects
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isPlayingRef.current && !isManualPauseRef.current) {
+        const audio = audioRef.current;
+        if (audio && audio.paused) {
+          console.log('App returned to foreground, ensuring audio playback is active...');
+          audio.play().catch(() => {});
+        }
+      }
+    };
+
+    const handleOnline = () => {
+      if (isPlayingRef.current && !isManualPauseRef.current) {
+        console.log('Network restored to online, refreshing stream...');
+        reconnectStream(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
   // Setup MediaSession action handlers
   useEffect(() => {
     if ('mediaSession' in navigator) {
@@ -258,13 +453,13 @@ export default function App() {
     }
   }, []);
 
-  // Audio Playback Controls
-  const handlePlay = async () => {
-    setPlaybackError(null);
-    setIsBuffering(true);
-
+  // Configure Audio element and attach robust listeners
+  const setupAudioElement = (): HTMLAudioElement => {
     if (!audioRef.current) {
       const audio = new Audio();
+      audio.preload = 'auto'; // Ensures ahead buffering for cellular stability
+      audio.crossOrigin = 'anonymous';
+      (audio as any).playsInline = true;
       audioRef.current = audio;
     }
 
@@ -275,53 +470,110 @@ export default function App() {
       setIsBuffering(false);
       setIsPlaying(true);
       setPlaybackError(null);
-    };
-
-    audio.onwaiting = () => {
-      setIsBuffering(true);
-    };
-
-    audio.onerror = () => {
-      setIsBuffering(false);
-      setIsPlaying(false);
-
-      if (streamAttemptRef.current === 0) {
-        streamAttemptRef.current = 1;
-        audio.src = `${STREAM_PRIMARY}?_t=${Date.now()}`;
-        audio.load();
-        audio.play().catch(() => {
-          setPlaybackError('No se pudo conectar al streaming. Reintentando...');
-        });
-      } else {
-        setPlaybackError('Error al reproducir la transmisión. Haz clic en recargar.');
+      lastPlaybackProgressRef.current = Date.now();
+      lastPositionRef.current = audio.currentTime;
+      requestWakeLock();
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
       }
     };
 
-    try {
-      const streamSource =
-        streamAttemptRef.current === 0
-          ? `${STREAM_PROXY}?_t=${Date.now()}`
-          : `${STREAM_PRIMARY}?_t=${Date.now()}`;
+    audio.onwaiting = () => {
+      if (!isManualPauseRef.current) {
+        setIsBuffering(true);
+      }
+    };
 
+    audio.oncanplay = () => {
+      if (isPlayingRef.current && !isManualPauseRef.current) {
+        setIsBuffering(false);
+      }
+    };
+
+    audio.onstalled = () => {
+      if (!isManualPauseRef.current && isPlayingRef.current) {
+        setIsBuffering(true);
+        if (Date.now() - lastPlaybackProgressRef.current > 18000) {
+          reconnectStream(false);
+        }
+      }
+    };
+
+    audio.onended = () => {
+      // Live radio never ends naturally. Reconnect immediately!
+      if (!isManualPauseRef.current && isPlayingRef.current) {
+        reconnectStream(false);
+      }
+    };
+
+    audio.onerror = () => {
+      if (isManualPauseRef.current) return;
+      setIsBuffering(true);
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (!isManualPauseRef.current) {
+          reconnectStream(true);
+        }
+      }, 1500);
+    };
+
+    return audio;
+  };
+
+  // Audio Playback Controls
+  const handlePlay = async () => {
+    isManualPauseRef.current = false;
+    setPlaybackError(null);
+    setIsBuffering(true);
+
+    unlockAudioContext();
+    requestWakeLock();
+
+    const audio = setupAudioElement();
+    audio.volume = volume;
+
+    try {
+      // Prioritize direct live Cloudflare HTTPS stream (unlimited duration, zero proxy cutoff)
+      const streamSource = getStreamUrl(streamAttemptRef.current);
       audio.src = streamSource;
-      audio.load();
       await audio.play();
-    } catch (err: any) {
+      setIsPlaying(true);
       setIsBuffering(false);
-      setIsPlaying(false);
+      lastPlaybackProgressRef.current = Date.now();
+      lastPositionRef.current = audio.currentTime;
+    } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        setPlaybackError('Haz clic en el botón de reproducir para escuchar en vivo.');
+        // Fallback to secondary stream source
+        streamAttemptRef.current = streamAttemptRef.current === 0 ? 1 : 0;
+        try {
+          audio.src = getStreamUrl(streamAttemptRef.current);
+          await audio.play();
+          setIsPlaying(true);
+          setIsBuffering(false);
+        } catch {
+          setIsBuffering(false);
+          setIsPlaying(false);
+          setPlaybackError('Haz clic en el botón de reproducir para escuchar en vivo.');
+        }
+      } else {
+        setIsBuffering(false);
       }
     }
   };
 
   const handlePause = () => {
+    isManualPauseRef.current = true;
+    releaseWakeLock();
+    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = '';
     }
     setIsPlaying(false);
     setIsBuffering(false);
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'paused';
+    }
   };
 
   const togglePlay = () => {
@@ -334,7 +586,9 @@ export default function App() {
 
   const handleReconnectLive = () => {
     setActionFeedback('Sincronizando señal en vivo...');
-    setTimeout(() => setActionFeedback(null), 2000);
+    setTimeout(() => setActionFeedback(null), 2500);
+    streamAttemptRef.current = 0; // Prioritize direct live Cloudflare HTTPS stream
+    isManualPauseRef.current = false;
     handlePlay();
   };
 
@@ -711,6 +965,9 @@ export default function App() {
           </div>
         </main>
 
+        {/* PWA Install Notice Banner (surfaces when browser allows native installation on Android/Desktop) */}
+        <InstallPromptBanner />
+
         {/* Bottom Navigation Bar with 3 Tabs (Glass Transparency) */}
         <nav
           aria-label="Navegación principal"
@@ -747,7 +1004,29 @@ export default function App() {
             <span className="text-[11px] font-bold">Noticias</span>
           </button>
 
-          {/* Tab 3: Más */}
+          {/* Tab 3: Apoyar / Cafecito (Tacita de café animada) */}
+          <button
+            type="button"
+            id="bottomNavSupportBtn"
+            onClick={() => {
+              setActiveTab('apoyar');
+              setIsSupportOpen(true);
+            }}
+            className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition cursor-pointer relative group ${
+              activeTab === 'apoyar' || isSupportOpen
+                ? 'text-cyan-400 drop-shadow-[0_0_10px_rgba(0,229,255,0.7)]'
+                : 'text-white/50 hover:text-cyan-300'
+            }`}
+            title="Apoyá a Nuestra Radio (Doná un cafecito)"
+          >
+            <AnimatedCoffeeIcon
+              className="w-5 h-5 text-cyan-400"
+              isActive={activeTab === 'apoyar' || isSupportOpen}
+            />
+            <span className="text-[11px] font-bold">Apoyar</span>
+          </button>
+
+          {/* Tab 4: Más */}
           <button
             type="button"
             onClick={() => {
@@ -816,6 +1095,7 @@ export default function App() {
         onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenTimer={() => setIsTimerModalOpen(true)}
         onOpenNews={() => setIsNewsOpen(true)}
+        onOpenSupport={() => setIsSupportOpen(true)}
         onShare={handleShare}
         streamUrl={station.streamUrl}
       />
@@ -863,6 +1143,15 @@ export default function App() {
         isOpen={isNewsOpen}
         onClose={() => {
           setIsNewsOpen(false);
+          setActiveTab('inicio');
+        }}
+      />
+
+      {/* Pantalla Apoyá a Nuestra Radio (Mercado Pago, Cafecito & WhatsApp) */}
+      <SupportModal
+        isOpen={isSupportOpen}
+        onClose={() => {
+          setIsSupportOpen(false);
           setActiveTab('inicio');
         }}
       />

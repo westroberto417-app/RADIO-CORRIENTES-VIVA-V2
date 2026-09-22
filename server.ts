@@ -10,6 +10,30 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Service Worker and Manifest endpoints with explicit PWA headers
+app.get('/sw.js', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(process.cwd(), 'public', 'sw.js'));
+});
+
+app.get(['/manifest.webmanifest', '/manifest.json'], (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Content-Type', 'application/manifest+json; charset=UTF-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(process.cwd(), 'public', 'manifest.webmanifest'));
+});
+
 // API health endpoint
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -361,16 +385,53 @@ app.get('/api/nowplaying', async (_req: Request, res: Response) => {
   }
 });
 
-// API: Stream Proxy (prioritizes direct live audio from 194.163.184.176:8070 over HTTPS)
+// API: Stream Proxy with infinite keep-alive, resilient reconnection and zero-buffering
 app.all('/api/stream', (req: Request, res: Response) => {
+  // Disable socket timeouts for continuous radio streaming
+  req.socket.setTimeout(0);
+  req.socket.setKeepAlive(true, 2000);
+  if (res.socket) {
+    res.socket.setTimeout(0);
+    res.socket.setKeepAlive(true, 2000);
+  }
+
   if (req.method === 'HEAD') {
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Accept-Ranges', 'none');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     return res.status(200).end();
   }
 
-  const proxyStream = (streamUrl: string, fallbackUrl?: string) => {
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('X-Accel-Buffering', 'no'); // Prevents Cloud Run / reverse proxies from buffering
+  res.setHeader('Transfer-Encoding', 'chunked');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  let isClientClosed = false;
+  let activeUpstreamReq: http.ClientRequest | null = null;
+
+  req.on('close', () => {
+    isClientClosed = true;
+    if (activeUpstreamReq) {
+      activeUpstreamReq.destroy();
+      activeUpstreamReq = null;
+    }
+  });
+
+  const streamSources = [
+    'https://streaming.rf.com.ar/listen/radiocorrientesviva/radio.mp3',
+    'http://194.163.184.176:8070/radio.mp3',
+  ];
+  let sourceIndex = 0;
+
+  const connectToUpstream = () => {
+    if (isClientClosed || res.writableEnded) return;
+
+    const streamUrl = streamSources[sourceIndex % streamSources.length];
     const isHttps = streamUrl.startsWith('https:');
     const client = isHttps ? https : http;
 
@@ -383,42 +444,48 @@ app.all('/api/stream', (req: Request, res: Response) => {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) RadioCorrientesViva/2.0',
         },
       },
-      (proxyRes: any) => {
+      (proxyRes: http.IncomingMessage) => {
         if (proxyRes.statusCode && proxyRes.statusCode >= 200 && proxyRes.statusCode < 400) {
-          res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'audio/mpeg');
-          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-          res.setHeader('Pragma', 'no-cache');
-          res.setHeader('Expires', '0');
-          res.setHeader('Connection', 'keep-alive');
-
-          proxyRes.pipe(res);
-
-          req.on('close', () => {
-            proxyReq.destroy();
+          proxyRes.on('data', (chunk: Buffer) => {
+            if (!isClientClosed && !res.writableEnded) {
+              res.write(chunk);
+            }
           });
-        } else if (fallbackUrl) {
-          proxyStream(fallbackUrl);
+
+          proxyRes.on('end', () => {
+            if (!isClientClosed && !res.writableEnded) {
+              // Upstream ended (e.g. Connection: close from Icecast). Auto-reconnect seamlessly without closing res!
+              sourceIndex++;
+              setTimeout(connectToUpstream, 100);
+            }
+          });
+
+          proxyRes.on('error', () => {
+            if (!isClientClosed && !res.writableEnded) {
+              sourceIndex++;
+              setTimeout(connectToUpstream, 250);
+            }
+          });
         } else {
-          res.status(502).send('Stream unavailable');
+          // Upstream status not ok, try next source
+          sourceIndex++;
+          setTimeout(connectToUpstream, 500);
         }
       }
     );
 
     proxyReq.on('error', () => {
-      if (fallbackUrl) {
-        proxyStream(fallbackUrl);
-      } else if (!res.headersSent) {
-        res.status(502).send('Stream error');
+      if (!isClientClosed && !res.writableEnded) {
+        sourceIndex++;
+        setTimeout(connectToUpstream, 500);
       }
     });
 
+    activeUpstreamReq = proxyReq;
     proxyReq.end();
   };
 
-  proxyStream(
-    'http://194.163.184.176:8070/radio.mp3',
-    'https://streaming.rf.com.ar/listen/radiocorrientesviva/radio.mp3'
-  );
+  connectToUpstream();
 });
 
 // API: Lyrics Lookup with LRCLIB and lyrics.ovh fallbacks
@@ -522,7 +589,6 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: { server },
       },
       appType: 'spa',
     });

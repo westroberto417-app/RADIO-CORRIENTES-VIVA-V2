@@ -11,23 +11,37 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        useCredentials: true,
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg', 'default-cover.jpg'],
         manifest: {
           id: '/',
           name: 'Radio Corrientes Viva',
           short_name: 'RadioViva',
-          description: 'Emisora de radio online en vivo con portadas dinámicas y letras de canciones.',
-          theme_color: '#0b0e13',
-          background_color: '#0b0e13',
+          description: 'Reproductor oficial de radio en vivo de Radio Corrientes Viva con visualización de portadas dinámicas, letras de canciones, historial y soporte PWA instalable.',
+          theme_color: '#070714',
+          background_color: '#070714',
           display: 'standalone',
+          display_override: ['standalone', 'minimal-ui'],
+          orientation: 'portrait',
           start_url: '/',
           scope: '/',
+          categories: ['music', 'entertainment', 'news'],
+          lang: 'es',
+          dir: 'ltr',
+          prefer_related_applications: false,
+          related_applications: [],
           icons: [
             {
               src: '/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
+            },
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable',
             },
             {
               src: '/pwa-512x512.png',
@@ -42,13 +56,53 @@ export default defineConfig(() => {
               purpose: 'maskable',
             },
           ],
+          shortcuts: [
+            {
+              name: 'Escuchar en vivo',
+              short_name: 'En vivo',
+              description: 'Reproducir Radio Corrientes Viva en directo',
+              url: '/?action=play',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                },
+              ],
+            },
+            {
+              name: 'Noticias Regionales',
+              short_name: 'Noticias',
+              description: 'Novedades de San Miguel y la región',
+              url: '/?view=news',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                },
+              ],
+            },
+            {
+              name: 'Historial de Canciones',
+              short_name: 'Historial',
+              description: 'Últimas canciones emitidas',
+              url: '/?view=history',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                },
+              ],
+            },
+          ],
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,woff,woff2}'],
         },
         devOptions: {
-          enabled: true,
-          type: 'module',
+          enabled: false,
         },
       }),
     ],

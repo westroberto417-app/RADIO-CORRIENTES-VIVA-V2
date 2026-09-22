@@ -8,10 +8,10 @@
         var isViteMsg = function(arg) {
           if (!arg) return false;
           try {
-            if (typeof arg === 'string') return arg.indexOf('[vite]') !== -1 || arg.indexOf('vite-hmr') !== -1;
+            if (typeof arg === 'string') return arg.indexOf('[vite]') !== -1 || arg.indexOf('vite-hmr') !== -1 || arg.indexOf("reading 'send'") !== -1;
             if (typeof arg === 'object') {
-              if (arg.message && typeof arg.message === 'string' && (arg.message.indexOf('[vite]') !== -1 || arg.message.indexOf('WebSocket') !== -1)) return true;
-              if (arg.stack && typeof arg.stack === 'string' && arg.stack.indexOf('@vite/client') !== -1) return true;
+              if (arg.message && typeof arg.message === 'string' && (arg.message.indexOf('[vite]') !== -1 || arg.message.indexOf('WebSocket') !== -1 || arg.message.indexOf("reading 'send'") !== -1)) return true;
+              if (arg.stack && typeof arg.stack === 'string' && (arg.stack.indexOf('@vite/client') !== -1 || arg.stack.indexOf("reading 'send'") !== -1)) return true;
             }
           } catch(err) {}
           return false;
@@ -57,7 +57,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="RadioViva" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="application-name" content="Radio Corrientes Viva" />
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+    <link rel="shortcut icon" href="/pwa-192x192.png" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="preload" as="image" href="/radio-studio-bg.jpg" fetchPriority="high" />
     <link rel="preload" as="image" href="/radio-logo.png" fetchPriority="high" />
