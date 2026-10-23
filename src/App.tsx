@@ -138,11 +138,11 @@ export default function App() {
 
   // Audio & Stream Health refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const streamAttemptRef = useRef<number>(0);
   const isPlayingRef = useRef<boolean>(false);
+  const isBufferingRef = useRef<boolean>(false);
   const isManualPauseRef = useRef<boolean>(false);
+  const isReconnectingRef = useRef<boolean>(false);
   const lastPlaybackProgressRef = useRef<number>(Date.now());
-  const lastPositionRef = useRef<number>(-1);
   const reconnectTimeoutRef = useRef<any>(null);
 
   const handleCast = async () => {
@@ -284,11 +284,9 @@ export default function App() {
   }, []);
 
   // Helper to obtain fresh stream URL with cache-busting timestamp
-  // Stream 0: Direct Cloudflare HTTPS (continuous, never terminates with 5-min timeout)
-  // Stream 1: Express proxy fallback
-  const getStreamUrl = (streamIndex: number) => {
-    const base = streamIndex === 0 ? STREAM_PRIMARY : STREAM_PROXY;
-    return `${base}?_t=${Date.now()}`;
+  // Direct Cloudflare HTTPS stream - continuous 24/7 without timeout cutoffs
+  const getStreamUrl = () => {
+    return `${STREAM_PRIMARY}?_t=${Date.now()}`;
   };
 
   // Screen WakeLock to prevent mobile CPU/screen sleep during radio playback
@@ -334,75 +332,87 @@ export default function App() {
     }
   };
 
-  // Reconnect audio stream seamlessly if network drops or buffer starves
-  const reconnectStream = (switchSource = false) => {
-    if (isManualPauseRef.current) return;
+  // Reconnect audio stream seamlessly if network drops or server restarts
+  const reconnectStream = () => {
+    if (isManualPauseRef.current || !isPlayingRef.current || isReconnectingRef.current) return;
+    isReconnectingRef.current = true;
+
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
 
-    if (switchSource) {
-      streamAttemptRef.current = streamAttemptRef.current === 0 ? 1 : 0;
+    setIsBuffering(true);
+    isBufferingRef.current = true;
+    const audio = audioRef.current;
+    if (!audio) {
+      isReconnectingRef.current = false;
+      return;
     }
 
-    setIsBuffering(true);
-    const audio = audioRef.current;
-    if (!audio) return;
-
     try {
-      const targetUrl = getStreamUrl(streamAttemptRef.current);
-      audio.src = targetUrl;
-      audio
-        .play()
-        .then(() => {
-          setIsBuffering(false);
-          setIsPlaying(true);
-          setPlaybackError(null);
-          lastPlaybackProgressRef.current = Date.now();
-          lastPositionRef.current = audio.currentTime;
-          requestWakeLock();
-        })
-        .catch((err) => {
-          if (err?.name === 'AbortError') return;
-          console.warn('Playback reconnect failed, retrying in 2.5s...', err);
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isPlayingRef.current && !isManualPauseRef.current) {
-              reconnectStream(true);
+      const freshUrl = getStreamUrl();
+      audio.src = freshUrl;
+      audio.load();
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsBuffering(false);
+            isBufferingRef.current = false;
+            setIsPlaying(true);
+            isPlayingRef.current = true;
+            setPlaybackError(null);
+            lastPlaybackProgressRef.current = Date.now();
+            isReconnectingRef.current = false;
+            requestWakeLock();
+          })
+          .catch((err) => {
+            isReconnectingRef.current = false;
+            if (err?.name === 'AbortError') return;
+            if (err?.name === 'NotAllowedError') {
+              console.warn('Autoplay prevented automatic resumption; awaiting user interaction.');
+              setIsBuffering(false);
+              isBufferingRef.current = false;
+              setIsPlaying(false);
+              isPlayingRef.current = false;
+              setPlaybackError('Toca reproducir para reanudar la señal en vivo');
+              return;
             }
-          }, 2500);
-        });
+            // Error de conexión temporal: reintentar en 2s
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (isPlayingRef.current && !isManualPauseRef.current) {
+                reconnectStream();
+              }
+            }, 2000);
+          });
+      } else {
+        isReconnectingRef.current = false;
+      }
     } catch {
-      // Ignore sync throw
+      isReconnectingRef.current = false;
     }
   };
 
-  // Stream Health Watchdog: monitors live stream with safety margins (avoids false drops on background tabs)
+  // Stream Health Watchdog: prevents false cuts on background tabs, monitors real decoding activity
   useEffect(() => {
     const watchdogInterval = setInterval(() => {
       if (!isPlayingRef.current || isManualPauseRef.current) return;
       const audio = audioRef.current;
       if (!audio) return;
 
-      const currentPos = audio.currentTime;
-
-      if (!audio.paused && !audio.ended) {
-        if (currentPos > 0 && currentPos === lastPositionRef.current) {
-          // Stream buffer starved for > 16 seconds of verified silence
-          if (Date.now() - lastPlaybackProgressRef.current > 16000) {
-            console.warn('Live audio stall detected. Auto-reconnecting cleanly...');
-            lastPlaybackProgressRef.current = Date.now();
-            reconnectStream(false);
-          }
-        } else {
-          lastPositionRef.current = currentPos;
-          lastPlaybackProgressRef.current = Date.now();
-        }
-      } else if (audio.paused && !isManualPauseRef.current) {
-        // Audio paused unexpectedly by OS interruption or temporary headphone disconnect
-        if (Date.now() - lastPlaybackProgressRef.current > 8000) {
-          console.warn('Live audio paused unexpectedly. Resuming playback...');
-          lastPlaybackProgressRef.current = Date.now();
-          audio.play().catch(() => {
-            reconnectStream(false);
+      // If audio is paused unexpectedly by OS interruption or temporary headphone disconnect
+      if (audio.paused && !isManualPauseRef.current) {
+        console.warn('Live audio paused unexpectedly. Resuming playback...');
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            reconnectStream();
           });
+        }
+      } else if (!audio.paused && !audio.ended) {
+        // Only trigger reconnect if there has been no timeupdate / buffer activity for more than 28 seconds
+        if (Date.now() - lastPlaybackProgressRef.current > 28000) {
+          console.warn('Live audio stall confirmed (>28s silence). Reconnecting...');
+          lastPlaybackProgressRef.current = Date.now();
+          reconnectStream();
         }
       }
     }, 4000);
@@ -425,7 +435,7 @@ export default function App() {
     const handleOnline = () => {
       if (isPlayingRef.current && !isManualPauseRef.current) {
         console.log('Network restored to online, refreshing stream...');
-        reconnectStream(false);
+        reconnectStream();
       }
     };
 
@@ -453,25 +463,36 @@ export default function App() {
     }
   }, []);
 
-  // Configure Audio element and attach robust listeners
+  // Configure Audio element with standard native streaming (no CORS restrictions)
   const setupAudioElement = (): HTMLAudioElement => {
     if (!audioRef.current) {
       const audio = new Audio();
-      audio.preload = 'auto'; // Ensures ahead buffering for cellular stability
-      audio.crossOrigin = 'anonymous';
+      audio.preload = 'auto';
+      // Playsinline for mobile web apps / PWAs
       (audio as any).playsInline = true;
+      (audio as any)['webkit-playsinline'] = true;
       audioRef.current = audio;
     }
 
     const audio = audioRef.current;
     audio.volume = volume;
 
+    // Track active playback decoding
+    audio.ontimeupdate = () => {
+      lastPlaybackProgressRef.current = Date.now();
+      if (isBufferingRef.current) {
+        setIsBuffering(false);
+        isBufferingRef.current = false;
+      }
+    };
+
     audio.onplaying = () => {
       setIsBuffering(false);
+      isBufferingRef.current = false;
       setIsPlaying(true);
+      isPlayingRef.current = true;
       setPlaybackError(null);
       lastPlaybackProgressRef.current = Date.now();
-      lastPositionRef.current = audio.currentTime;
       requestWakeLock();
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'playing';
@@ -481,38 +502,39 @@ export default function App() {
     audio.onwaiting = () => {
       if (!isManualPauseRef.current) {
         setIsBuffering(true);
+        isBufferingRef.current = true;
       }
     };
 
     audio.oncanplay = () => {
       if (isPlayingRef.current && !isManualPauseRef.current) {
         setIsBuffering(false);
+        isBufferingRef.current = false;
       }
     };
 
     audio.onstalled = () => {
       if (!isManualPauseRef.current && isPlayingRef.current) {
         setIsBuffering(true);
-        if (Date.now() - lastPlaybackProgressRef.current > 18000) {
-          reconnectStream(false);
-        }
+        isBufferingRef.current = true;
       }
     };
 
     audio.onended = () => {
       // Live radio never ends naturally. Reconnect immediately!
       if (!isManualPauseRef.current && isPlayingRef.current) {
-        reconnectStream(false);
+        reconnectStream();
       }
     };
 
     audio.onerror = () => {
       if (isManualPauseRef.current) return;
       setIsBuffering(true);
+      isBufferingRef.current = true;
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = setTimeout(() => {
-        if (!isManualPauseRef.current) {
-          reconnectStream(true);
+        if (!isManualPauseRef.current && isPlayingRef.current) {
+          reconnectStream();
         }
       }, 1500);
     };
@@ -523,8 +545,10 @@ export default function App() {
   // Audio Playback Controls
   const handlePlay = async () => {
     isManualPauseRef.current = false;
+    isPlayingRef.current = true;
     setPlaybackError(null);
     setIsBuffering(true);
+    isBufferingRef.current = true;
 
     unlockAudioContext();
     requestWakeLock();
@@ -533,36 +557,48 @@ export default function App() {
     audio.volume = volume;
 
     try {
-      // Prioritize direct live Cloudflare HTTPS stream (unlimited duration, zero proxy cutoff)
-      const streamSource = getStreamUrl(streamAttemptRef.current);
+      // Connect directly to the station's official Cloudflare HTTPS live stream
+      const streamSource = getStreamUrl();
       audio.src = streamSource;
+      audio.load();
       await audio.play();
       setIsPlaying(true);
+      isPlayingRef.current = true;
       setIsBuffering(false);
+      isBufferingRef.current = false;
       lastPlaybackProgressRef.current = Date.now();
-      lastPositionRef.current = audio.currentTime;
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        // Fallback to secondary stream source
-        streamAttemptRef.current = streamAttemptRef.current === 0 ? 1 : 0;
+        console.warn('Initial playback failed, retrying with fresh connection...', err);
         try {
-          audio.src = getStreamUrl(streamAttemptRef.current);
+          const freshSource = `${STREAM_PRIMARY}?_t=${Date.now()}`;
+          audio.src = freshSource;
+          audio.load();
           await audio.play();
           setIsPlaying(true);
+          isPlayingRef.current = true;
           setIsBuffering(false);
-        } catch {
+          isBufferingRef.current = false;
+          lastPlaybackProgressRef.current = Date.now();
+        } catch (retryErr) {
+          console.error('Final playback attempt failed:', retryErr);
           setIsBuffering(false);
+          isBufferingRef.current = false;
           setIsPlaying(false);
+          isPlayingRef.current = false;
           setPlaybackError('Haz clic en el botón de reproducir para escuchar en vivo.');
         }
       } else {
         setIsBuffering(false);
+        isBufferingRef.current = false;
       }
     }
   };
 
   const handlePause = () => {
     isManualPauseRef.current = true;
+    isPlayingRef.current = false;
+    isBufferingRef.current = false;
     releaseWakeLock();
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     if (audioRef.current) {
@@ -587,7 +623,6 @@ export default function App() {
   const handleReconnectLive = () => {
     setActionFeedback('Sincronizando señal en vivo...');
     setTimeout(() => setActionFeedback(null), 2500);
-    streamAttemptRef.current = 0; // Prioritize direct live Cloudflare HTTPS stream
     isManualPauseRef.current = false;
     handlePlay();
   };

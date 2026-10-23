@@ -584,6 +584,12 @@ app.get('/api/news', (req, res) => {
 async function startServer() {
   const server = http.createServer(app);
 
+  // Configure zero timeouts on Node HTTP server for continuous streaming
+  server.timeout = 0;
+  server.keepAliveTimeout = 0;
+  server.headersTimeout = 0;
+  server.requestTimeout = 0;
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

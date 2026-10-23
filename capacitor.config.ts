@@ -1,0 +1,37 @@
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.radiocorrientesviva.app',
+  appName: 'Radio Corrientes Viva',
+  webDir: 'dist',
+  server: {
+    androidScheme: 'https',
+    cleartext: true,
+    allowNavigation: [
+      'streaming.rf.com.ar',
+      'api.deezer.com',
+      'e-cdns-images.dzcdn.net',
+      'api.lyrics.ovh',
+      'wa.me',
+      'api.whatsapp.com',
+      'link.mercadopago.com.ar'
+    ]
+  },
+  android: {
+    allowMixedContent: true,
+    backgroundColor: '#070714',
+    buildOptions: {
+      releaseType: 'APK'
+    }
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 2000,
+      backgroundColor: '#070714',
+      androidSplashResourceName: 'splash',
+      androidScaleType: 'CENTER_CROP'
+    }
+  }
+};
+
+export default config;
