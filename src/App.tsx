@@ -35,6 +35,8 @@ import { SleepTimerModal } from './components/SleepTimerModal';
 import { NewsModal } from './components/NewsModal';
 import { SupportModal } from './components/SupportModal';
 import { AnimatedCoffeeIcon } from './components/AnimatedCoffeeIcon';
+import { ApkDownloadModal } from './components/ApkDownloadModal';
+import { LiveClock } from './components/LiveClock';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { RadioData, NowPlayingSong, StationInfo, HistoryItem } from './types';
 
@@ -91,6 +93,7 @@ export default function App() {
   const [isNewsOpen, setIsNewsOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
+  const [isApkModalOpen, setIsApkModalOpen] = useState(false);
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -739,19 +742,22 @@ export default function App() {
               </h1>
             </div>
 
-            {/* Notification / Bell Button */}
-            <button
-              type="button"
-              id="bellButton"
-              onClick={() => setIsNotificationsOpen((prev) => !prev)}
-              className="relative p-2.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
-              aria-label="Notificaciones"
-              title="Notificaciones de la emisora"
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-pink-500 animate-ping" />
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-pink-500" />
-            </button>
+            {/* Right Header Actions: Bell */}
+            <div className="flex items-center gap-1.5">
+              {/* Notification / Bell Button */}
+              <button
+                type="button"
+                id="bellButton"
+                onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                className="relative p-2 rounded-full text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                aria-label="Notificaciones"
+                title="Notificaciones de la emisora"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-pink-500 animate-ping" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-pink-500" />
+              </button>
+            </div>
           </div>
 
           {/* Subtitle Pill Badge: DESDE SAN MIGUEL, CORRIENTES */}
@@ -762,6 +768,9 @@ export default function App() {
             </span>
             <span className="uppercase">DESDE SAN MIGUEL, CORRIENTES</span>
           </div>
+
+          {/* Live Broadcast Clock & Date Display */}
+          <LiveClock />
         </header>
 
         {/* Central Stage: Square Cover + Neon Frame + Symmetrical Waveform */}
@@ -1131,6 +1140,7 @@ export default function App() {
         onOpenTimer={() => setIsTimerModalOpen(true)}
         onOpenNews={() => setIsNewsOpen(true)}
         onOpenSupport={() => setIsSupportOpen(true)}
+        onOpenApk={() => setIsApkModalOpen(true)}
         onShare={handleShare}
         streamUrl={station.streamUrl}
       />
@@ -1199,6 +1209,12 @@ export default function App() {
         remainingSeconds={sleepTimerRemaining}
         onSetTimer={handleSetSleepTimer}
         onClearTimer={handleClearSleepTimer}
+      />
+
+      {/* Modal de Descarga de APK Android Nativo */}
+      <ApkDownloadModal
+        isOpen={isApkModalOpen}
+        onClose={() => setIsApkModalOpen(false)}
       />
 
       {/* Share Toast Notification */}

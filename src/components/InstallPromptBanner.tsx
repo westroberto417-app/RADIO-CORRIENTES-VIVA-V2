@@ -98,17 +98,28 @@ export const InstallPromptBanner: React.FC = () => {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Direct Android APK download */}
+            <a
+              href="/RadioCorrientesViva.apk"
+              download="RadioCorrientesViva.apk"
+              className="px-2.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-emerald-300 hover:text-white font-extrabold text-xs flex items-center gap-1 transition cursor-pointer"
+              title="Descargar paquete APK oficial para Android (11.2 MB)"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+              <span>APK</span>
+            </a>
+
             {/* Custom 'Instalar App' Button */}
             <button
               type="button"
               id="btnCustomInstallApp"
               onClick={handleInstallClick}
               disabled={isInstalling}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-pink-600 via-purple-600 to-cyan-500 hover:from-pink-500 hover:via-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs shadow-md shadow-pink-500/30 hover:shadow-pink-500/50 flex items-center gap-1.5 transition-all transform active:scale-95 cursor-pointer whitespace-nowrap"
+              className="px-3 py-2 rounded-xl bg-gradient-to-r from-pink-600 via-purple-600 to-cyan-500 hover:from-pink-500 hover:via-purple-500 hover:to-cyan-400 text-white font-extrabold text-xs shadow-md shadow-pink-500/30 hover:shadow-pink-500/50 flex items-center gap-1.5 transition-all transform active:scale-95 cursor-pointer whitespace-nowrap"
               title="Instalar Radio Corrientes Viva en tu dispositivo"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Instalar App</span>
+              <span>Instalar</span>
             </button>
 
             {/* Dismiss Button */}
@@ -236,16 +247,27 @@ export const InstallPromptBanner: React.FC = () => {
                 </a>
               </div>
             ) : (
-              <div className="mt-4 space-y-4 text-sm text-white/80 leading-relaxed">
+              <div className="mt-4 space-y-3.5 text-sm text-white/80 leading-relaxed">
                 <p>
-                  En Google Chrome para Android, pulsa el menú de opciones (tres puntos <strong className="text-white">⋮</strong>) y selecciona <strong className="text-pink-400">«Instalar aplicación»</strong> o <strong className="text-pink-400">«Agregar a la pantalla principal»</strong>.
+                  En Google Chrome para Android, puedes pulsar el menú de opciones (tres puntos <strong className="text-white">⋮</strong>) y seleccionar <strong className="text-pink-400">«Instalar aplicación»</strong>.
                 </p>
+                <div className="pt-2 border-t border-white/10">
+                  <p className="text-xs text-white/70 mb-2">O si prefieres instalar directamente el paquete APK nativo:</p>
+                  <a
+                    href="/RadioCorrientesViva.apk"
+                    download="RadioCorrientesViva.apk"
+                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 text-center transition cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Descargar APK Android (.apk)</span>
+                  </a>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowGenericModal(false)}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 text-white font-bold text-sm hover:opacity-90 transition cursor-pointer shadow-lg shadow-pink-600/30"
+                  className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white/80 font-medium text-xs transition cursor-pointer mt-1"
                 >
-                  Entendido
+                  Cerrar
                 </button>
               </div>
             )}

@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import http from 'http';
 import https from 'https';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { REGIONAL_NEWS } from './src/data/newsData';
 
@@ -38,6 +39,27 @@ app.get(['/manifest.webmanifest', '/manifest.json'], (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Direct Android APK Download endpoint
+app.get(['/download-apk', '/radio-corrientes-viva.apk', '/RadioCorrientesViva.apk'], (_req, res) => {
+  const possiblePaths = [
+    path.join(process.cwd(), 'public', 'RadioCorrientesViva.apk'),
+    path.join(process.cwd(), 'public', 'radio-corrientes-viva.apk'),
+    path.join(process.cwd(), 'dist', 'RadioCorrientesViva.apk'),
+    path.join(process.cwd(), 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'),
+  ];
+
+  for (const apkPath of possiblePaths) {
+    if (fs.existsSync(apkPath)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="RadioCorrientesViva.apk"');
+      return res.sendFile(apkPath);
+    }
+  }
+
+  res.status(404).send('APK en proceso de generación. Por favor, reintenta en unos instantes.');
+});
+
 
 // In-memory cache for artwork and lyrics to avoid hammering third-party APIs
 const coverArtCache = new Map<string, string>();

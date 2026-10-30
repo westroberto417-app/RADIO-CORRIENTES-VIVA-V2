@@ -27,6 +27,7 @@ interface MenuDrawerProps {
   onOpenTimer?: () => void;
   onOpenNews?: () => void;
   onOpenSupport?: () => void;
+  onOpenApk?: () => void;
   onShare: () => void;
   streamUrl: string;
 }
@@ -40,6 +41,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({
   onOpenTimer,
   onOpenNews,
   onOpenSupport,
+  onOpenApk,
   onShare,
   streamUrl,
 }) => {
@@ -114,29 +116,77 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({
 
             {/* Navigation Items */}
             <div className="mt-5 space-y-2">
-              {/* Install App Button / Status */}
+              {/* SPOTLIGHT: Direct Native Android APK Download */}
+              <div className="p-0.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 shadow-[0_0_20px_rgba(16,185,129,0.35)]">
+                <div className="rounded-[14px] bg-[#0d0a21] p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                        <Smartphone className="w-4 h-4 animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-white flex items-center gap-1.5">
+                          <span>App Android (.APK)</span>
+                          <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-black text-[9px] font-black uppercase">
+                            OFICIAL
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-emerald-300/80">Instalador nativo (11.2 MB)</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <a
+                      href="/RadioCorrientesViva.apk"
+                      download="RadioCorrientesViva.apk"
+                      className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/30 transition cursor-pointer"
+                      title="Descargar archivo .apk directo"
+                    >
+                      <Download className="w-3.5 h-3.5 text-black stroke-[2.5]" />
+                      <span>Descargar APK</span>
+                    </a>
+
+                    {onOpenApk && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenApk();
+                        }}
+                        className="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-[11px] transition cursor-pointer"
+                        title="Ver instrucciones de instalación paso a paso"
+                      >
+                        Guía
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Install PWA Option / Status */}
               {isInstalled ? (
                 <div className="w-full px-3.5 py-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 flex items-center gap-2.5 text-xs font-semibold text-emerald-300 shadow-sm">
                   <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>App instalada en el dispositivo</span>
+                  <span>App PWA instalada</span>
                 </div>
               ) : (
                 <button
                   type="button"
                   id="installPwaDrawerBtn"
                   onClick={handleInstall}
-                  className="w-full px-3.5 py-3 rounded-xl bg-gradient-to-r from-pink-600/35 via-purple-600/35 to-cyan-500/35 hover:from-pink-600/50 hover:via-purple-600/50 hover:to-cyan-500/50 text-white border border-pink-500/50 flex items-center justify-between text-xs font-bold transition shadow-[0_0_15px_rgba(236,72,153,0.3)] cursor-pointer group"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-pink-500/20 text-white hover:text-pink-300 border border-white/10 flex items-center justify-between text-xs font-semibold transition cursor-pointer group"
                 >
                   <div className="flex items-center gap-2.5">
-                    <Smartphone className="w-4 h-4 text-pink-400 group-hover:scale-110 transition-transform" />
-                    <span>Instalar Aplicación PWA</span>
+                    <Smartphone className="w-4 h-4 text-pink-400" />
+                    <span>Instalar versión PWA (Web)</span>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full bg-gradient-to-r from-pink-600 to-purple-600 text-[10px] font-black text-white uppercase tracking-wider flex items-center gap-1 shadow-md shadow-pink-500/40">
-                    <Download className="w-3 h-3" />
-                    <span>Instalar App</span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] font-bold text-white/80 uppercase">
+                    PWA
                   </span>
                 </button>
               )}
+
 
               {onOpenNews && (
                 <button
